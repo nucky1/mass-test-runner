@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiService, RunSummary, RunConfig, PluginInfo } from '../services/api'
 import './RunsPage.css'
@@ -16,9 +16,13 @@ function RunsPage() {
   })
   const navigate = useNavigate()
 
+  // Ref para input file oculto (Importar JSON)
+  const importFileRef = useRef<HTMLInputElement | null>(null)
+
   useEffect(() => {
     loadRuns()
     loadPlugins()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadRuns = async () => {
@@ -38,10 +42,13 @@ function RunsPage() {
     try {
       const data = await apiService.listPlugins()
       setPlugins(data)
+
       // Si hay plugins, seleccionar el primero por defecto y actualizar selectedPlugin
       if (data.length > 0) {
-        const defaultPlugin = data.find((p) => p.plugin_name === formData.plugin_name) || data[0]
+        const defaultPlugin =
+          data.find((p) => p.plugin_name === formData.plugin_name) || data[0]
         setSelectedPlugin(defaultPlugin)
+
         if (formData.plugin_name !== defaultPlugin.plugin_name) {
           setFormData({
             plugin_name: defaultPlugin.plugin_name,
@@ -59,27 +66,109 @@ function RunsPage() {
     const plugin = plugins.find((p) => p.plugin_name === pluginName)
     if (plugin) {
       setSelectedPlugin(plugin)
-      // Inicializar config vacío
-      const newConfig: Record<string, any> = {}
       setFormData({
         plugin_name: pluginName,
-        config: newConfig,
+        config: {},
       })
     }
   }
 
   const handleConfigChange = (key: string, value: any) => {
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       config: {
-        ...formData.config,
+        ...prev.config,
         [key]: value,
       },
+    }))
+  }
+
+  // --- JSON import/export helpers ---
+
+  const castValueByType = (type: string, value: any) => {
+    if (value === null || value === undefined) return value
+
+    switch (type) {
+      case 'int': {
+        if (typeof value === 'number') return Math.trunc(value)
+        const n = parseInt(String(value), 10)
+        return Number.isFinite(n) ? n : ''
+      }
+      case 'float': {
+        if (typeof value === 'number') return value
+        const n = parseFloat(String(value))
+        return Number.isFinite(n) ? n : ''
+      }
+      case 'bool': {
+        if (typeof value === 'boolean') return value
+        const s = String(value).toLowerCase().trim()
+        return s === 'true' || s === '1' || s === 'yes' || s === 'y'
+      }
+      default:
+        // string u otros
+        return String(value)
+    }
+  }
+
+  const applyJsonConfig = (jsonConfig: Record<string, any>) => {
+    const schema = selectedPlugin?.config_schema || {}
+    const nextConfig: Record<string, any> = { ...(formData.config as Record<string, any>) }
+
+    // Si hay schema, casteamos keys conocidas y mantenemos extras
+    if (schema && Object.keys(schema).length > 0) {
+      for (const [key, type] of Object.entries(schema)) {
+        if (key in jsonConfig) {
+          nextConfig[key] = castValueByType(type as string, jsonConfig[key])
+        }
+      }
+      // Extras (keys que vienen en JSON pero no están en el schema)
+      for (const [key, val] of Object.entries(jsonConfig)) {
+        if (!(key in schema)) {
+          nextConfig[key] = val
+        }
+      }
+    } else {
+      Object.assign(nextConfig, jsonConfig)
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      config: nextConfig,
+    }))
+  }
+
+  const handleJsonUpload = async (file: File) => {
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        alert('El JSON debe ser un objeto (ej: {"param":"valor"})')
+        return
+      }
+
+      applyJsonConfig(parsed as Record<string, any>)
+      alert('Configuración cargada desde JSON ✅')
+    } catch (err: any) {
+      console.error('Error parsing JSON config:', err)
+      alert(`No se pudo leer el JSON: ${err?.message || 'Error desconocido'}`)
+    }
+  }
+
+  const handleExportConfig = () => {
+    const blob = new Blob([JSON.stringify(formData.config, null, 2)], {
+      type: 'application/json',
     })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${formData.plugin_name}_config.json`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const renderConfigField = (key: string, type: string) => {
-    const value = formData.config[key] ?? (type === 'bool' ? false : '')
+    const value = (formData.config as any)[key] ?? (type === 'bool' ? false : '')
     const label = key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
 
     if (type === 'int') {
@@ -148,7 +237,6 @@ function RunsPage() {
       setCreating(true)
       const result = await apiService.createRun(formData)
       setShowForm(false)
-      // Redirigir al detalle del run creado
       navigate(`/runs/${result.run_id}`)
     } catch (error: any) {
       console.error('Error creating run:', error)
@@ -171,10 +259,7 @@ function RunsPage() {
     <div className="runs-page">
       <div className="page-header">
         <h1>Ejecuciones</h1>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowForm(!showForm)}
-        >
+        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
           {showForm ? 'Cancelar' : 'Nueva Ejecución'}
         </button>
       </div>
@@ -200,7 +285,50 @@ function RunsPage() {
 
             {selectedPlugin && Object.keys(selectedPlugin.config_schema).length > 0 && (
               <div className="config-section">
-                <h3>Configuración</h3>
+                {/* Header con título + botones en la misma línea */}
+                <div className="config-header-row">
+                  <h3>Configuración</h3>
+
+                  <div className="config-actions">
+                    {/* input file oculto */}
+                    <input
+                      ref={importFileRef}
+                      type="file"
+                      accept=".json,application/json"
+                      className="config-file-input-hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        if (f) handleJsonUpload(f)
+                        // permitir re-subir el mismo archivo
+                        e.currentTarget.value = ''
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-compact"
+                      onClick={() => importFileRef.current?.click()}
+                      title="Importar configuración desde un JSON"
+                    >
+                      Importar JSON
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-compact"
+                      onClick={handleExportConfig}
+                      title="Exportar la configuración actual a un JSON"
+                    >
+                      Exportar JSON
+                    </button>
+                  </div>
+                </div>
+
+                <small className="form-help">
+                  Podés importar un archivo JSON para completar automáticamente el formulario.
+                  Las claves se castearán según el <code>config_schema</code> del plugin.
+                </small>
+
                 {Object.entries(selectedPlugin.config_schema).map(([key, type]) =>
                   renderConfigField(key, type as string)
                 )}
@@ -248,9 +376,7 @@ function RunsPage() {
                   <td className="run-id">{run.run_id.substring(0, 8)}...</td>
                   <td>{run.plugin_name}</td>
                   <td>
-                    <span className={`status status-${run.status}`}>
-                      {run.status}
-                    </span>
+                    <span className={`status status-${run.status}`}>{run.status}</span>
                   </td>
                   <td>{formatDate(run.created_at)}</td>
                   <td>{run.total_cases}</td>
@@ -260,10 +386,7 @@ function RunsPage() {
                   <td>{run.mismatches}</td>
                   <td>{run.errors}</td>
                   <td>
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => navigate(`/runs/${run.run_id}`)}
-                    >
+                    <button className="btn btn-sm" onClick={() => navigate(`/runs/${run.run_id}`)}>
                       Ver
                     </button>
                   </td>

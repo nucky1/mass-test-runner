@@ -193,7 +193,7 @@ function PluginsPage() {
       {showForm && (
         <div className="create-form">
           <h2>{editingPlugin ? 'Editar Plugin' : 'Crear Nuevo Plugin'}</h2>
-          
+
           {/* Bloque informativo de dependencias */}
           <div className="deps-info">
             <div className="deps-info-header">
@@ -232,6 +232,62 @@ function PluginsPage() {
               )}
             </div>
           </div>
+          {/* Bloque informativo de contrato del plugin */}
+          <div className="deps-info" style={{ marginTop: 12 }}>
+            <div className="deps-info-header">
+              <strong>🧩 Contrato del Plugin (clases ya disponibles)</strong>
+            </div>
+            <div className="deps-info-content">
+              <p>
+                Al ejecutar un plugin dinámico, el sistema <strong>inyecta automáticamente</strong>{' '}
+                <code>TestPlugin</code>, <code>Case</code>, <code>Pred</code> y <code>Compare</code>.
+                <br />
+                <strong>No hace falta importarlas</strong> en el código del plugin.
+              </p>
+
+              <div className="deps-allowed" style={{ marginTop: 10 }}>
+                <strong>Tu clase debe heredar de:</strong>{' '}
+                <code>TestPlugin</code> y definir estos métodos:
+                <ul style={{ marginTop: 8 }}>
+                  <li><code>obtener_casos(config) -&gt; Iterable[Case]</code></li>
+                  <li><code>ejecutar_test(caso, config) -&gt; Pred</code></li>
+                  <li><code>comparar_resultados(caso, pred, config) -&gt; Compare</code></li>
+                </ul>
+              </div>
+
+              <div className="deps-builtin" style={{ marginTop: 10 }}>
+                <strong>Definiciones (simplificadas)</strong>
+                <pre className="deps-builtin-list" style={{ whiteSpace: 'pre-wrap' }}>
+                  {`class Case:
+  id: str
+  data: dict
+
+class Pred:
+  ok: bool
+  value: Any
+  status: str
+  raw: Any
+  meta: dict
+
+class Compare:
+  match: bool
+  truth: Any
+  pred: Any
+  reason: str
+  detail: dict
+
+class TestPlugin:
+  def obtener_casos(self, config) -> Iterable[Case]: ...
+  def ejecutar_test(self, caso: Case, config) -> Pred: ...
+  def comparar_resultados(self, caso: Case, pred: Pred, config) -> Compare: ...`}
+                </pre>
+                <small>
+                  Consejo: guardá el valor esperado (truth) dentro de <code>caso.data</code> (ej: <code>caso.data["label"]</code>)
+                  y comparalo contra <code>pred.value</code>.
+                </small>
+              </div>
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
@@ -267,28 +323,60 @@ function PluginsPage() {
                 onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                 required={!editingPlugin}
                 rows={15}
-                placeholder={`class MyPlugin(BasePlugin):
-    name = "mi-plugin"
-
-    def obtener_casos(self, config):
-        # Ej: leer de SQL, CSV, API, etc.
-        return [...]
-
-    def ejecutar_test(self, caso, config):
-        # Ej: llamar un LLM, un microservicio, reglas, etc.
-        return prediccion
-
-    def comparar_resultados(self, caso, prediccion, config):
-        # Normalizar evaluación
-        return {
-            "ok": True,
-            "score": 0.92,
-            "details": {
-              "expected": caso.get("expected"),
-              "got": prediccion
-            }
-        }
-
+                placeholder={`# Nota:
+                # - NO hace falta importar TestPlugin, Case, Pred, Compare.
+                #   El sistema los inyecta automáticamente antes de ejecutar tu código.
+                # - Si importás módulos, deben estar permitidos por el sandbox.
+                
+                class MyPlugin(TestPlugin):
+                    \"\"\"Ejemplo mínimo de plugin.\"\"\"
+                
+                    def obtener_casos(self, config):
+                        # Debe devolver Iterable[Case]
+                        # Guardá el "truth" esperado dentro de caso.data (ej: caso.data["label"])
+                        return [
+                            Case(
+                                id="case_1",
+                                data={
+                                    "input_text": "hola mundo",
+                                    "label": "T1"
+                                }
+                            )
+                        ]
+                
+                    def ejecutar_test(self, caso, config):
+                        # Debe devolver Pred
+                        # ok=False si hubo error; value puede ser None si no hay predicción
+                        predicted = "T1"  # TODO: tu lógica real
+                        return Pred(
+                            ok=True,
+                            value=predicted,
+                            status="success",
+                            raw={"prediction": predicted},
+                            meta={"model": "demo-like"}
+                        )
+                
+                    def comparar_resultados(self, caso, pred, config):
+                        # Debe devolver Compare
+                        truth = caso.data.get("label")
+                
+                        if not pred.ok:
+                            return Compare(
+                                match=False,
+                                truth=truth,
+                                pred=None,
+                                reason="Error en ejecución",
+                                detail={"status": pred.status, "meta": pred.meta}
+                            )
+                
+                        match = (truth == pred.value)
+                        return Compare(
+                            match=match,
+                            truth=truth,
+                            pred=pred.value,
+                            reason="Match" if match else f"Truth: {truth} / Pred: {pred.value}",
+                            detail={"case_id": caso.id}
+                        )
     }`}
               />
               {editingPlugin && (
@@ -297,6 +385,10 @@ function PluginsPage() {
                 </small>
               )}
             </div>
+            <small className="form-help">
+              El código debe definir una clase que herede de <code>TestPlugin</code> y retorne
+              objetos <code>Case</code>, <code>Pred</code> y <code>Compare</code> (no diccionarios).
+            </small>
 
             <div className="form-group">
               <label>Config Schema (JSON):</label>
@@ -354,14 +446,14 @@ function PluginsPage() {
                     </span>
                     {plugin.error_message && (
                       <>
-                        {(plugin.error_message.includes('Missing dependency') || 
+                        {(plugin.error_message.includes('Missing dependency') ||
                           plugin.error_message.includes('Dependency not allowed')) && (
-                          <span className="dependency-error-badge">
-                            {plugin.error_message.includes('Missing dependency') 
-                              ? 'Dependencia faltante' 
-                              : 'Dependencia no permitida'}
-                          </span>
-                        )}
+                            <span className="dependency-error-badge">
+                              {plugin.error_message.includes('Missing dependency')
+                                ? 'Dependencia faltante'
+                                : 'Dependencia no permitida'}
+                            </span>
+                          )}
                         <div className="error-message" title={plugin.error_message}>
                           ⚠️ {plugin.error_message.substring(0, 50)}
                           {plugin.error_message.length > 50 ? '...' : ''}
