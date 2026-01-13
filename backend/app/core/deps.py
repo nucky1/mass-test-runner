@@ -14,7 +14,7 @@ BUILTIN_PACKAGES: Set[str] = {
     # SQLite (viene con Python)
     "sqlite3",
     # Networking básico
-    "urllib", "urllib.parse", "urllib.request", "http", "email",
+    "urllib", "urllib.parse", "urllib.request", "http", "email","ftplib",
     # Utilidades
     "sys", "types", "traceback", "warnings", "logging", "argparse",
     "subprocess", "threading", "multiprocessing", "concurrent",
@@ -39,6 +39,10 @@ ALLOWED_PACKAGES: Set[str] = {
     "pyodbc",
     # Utilidades (si vienen como dependencias transitivas)
     "urllib3",
+    # Openai
+    "openai",
+    # FTP conexión
+    "ftplib"
 }
 
 

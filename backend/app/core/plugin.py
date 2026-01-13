@@ -187,52 +187,64 @@ class PluginFactory:
         is_valid, error_msg = validate_plugin_imports(code)
         if not is_valid:
             raise ValueError(error_msg)
-        
-        # Crear un módulo único para este plugin
+
         module_name = f"plugin_{plugin_name.replace('-', '_')}"
-        
-        # Compilar y ejecutar el código
+
         try:
             spec = importlib.util.spec_from_loader(module_name, loader=None)
             module = importlib.util.module_from_spec(spec)
-            
+
+            # ✅ IMPORTANTE: registrar módulo (ayuda a debugging y a algunos imports)
+            sys.modules[module_name] = module
+
+            # ✅ IMPORTANTE: inyectar símbolos base para que el plugin no deba importarlos
+            module.__dict__.update({
+                "TestPlugin": TestPlugin,
+                "Case": Case,
+                "Pred": Pred,
+                "Compare": Compare,
+            })
+
             # Ejecutar el código en el contexto del módulo
             exec(code, module.__dict__)
-            
+
             # Buscar la clase que implementa TestPlugin
-            # Asumimos que hay una clase con nombre similar al plugin_name
-            # o que el código define una clase llamada "PluginClass" o similar
             plugin_class = None
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if (isinstance(attr, type) and 
-                    issubclass(attr, TestPlugin) and 
-                    attr != TestPlugin):
+                if (
+                    isinstance(attr, type)
+                    and issubclass(attr, TestPlugin)
+                    and attr is not TestPlugin
+                ):
                     plugin_class = attr
                     break
-            
+
             if not plugin_class:
                 # Intentar con nombres comunes
-                for class_name in [plugin_name.title().replace('-', ''), 
-                                   f"{plugin_name}Plugin".replace('-', ''),
-                                   "PluginClass", "CustomPlugin"]:
+                for class_name in [
+                    plugin_name.title().replace("-", ""),
+                    f"{plugin_name}Plugin".replace("-", ""),
+                    "PluginClass",
+                    "CustomPlugin",
+                ]:
                     if hasattr(module, class_name):
                         attr = getattr(module, class_name)
                         if isinstance(attr, type) and issubclass(attr, TestPlugin):
                             plugin_class = attr
                             break
-            
+
             if not plugin_class:
                 raise ValueError(
-                    f"No se encontró una clase que implemente TestPlugin en el código del plugin. "
-                    f"El código debe definir una clase que herede de TestPlugin."
+                    "No se encontró una clase que implemente TestPlugin en el código del plugin. "
+                    "El código debe definir una clase que herede de TestPlugin."
                 )
-            
+
             return plugin_class()
-            
+
         except Exception as e:
             raise ValueError(f"Error al compilar/cargar código del plugin: {str(e)}")
-    
+
     @classmethod
     def register(cls, name: str, plugin_class: type):
         """Registra un nuevo plugin (para extensibilidad futura)"""
