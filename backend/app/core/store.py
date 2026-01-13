@@ -22,14 +22,25 @@ class ResultStore:
             plugin_name=plugin_name,
             status="running",
             config=config,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
+            processed_cases=0
         )
         self.db.add(run)
         self.db.commit()
         return run_id
     
+    def update_run_progress(self, run_id: str, total_cases: Optional[int] = None, processed_cases: Optional[int] = None) -> None:
+        """Actualiza el progreso de un run"""
+        run = self.db.query(Run).filter(Run.run_id == run_id).first()
+        if run:
+            if total_cases is not None:
+                run.total_cases = total_cases
+            if processed_cases is not None:
+                run.processed_cases = processed_cases
+            self.db.commit()
+    
     def save_detail(self, run_id: str, caso, pred, cmp) -> None:
-        """Guarda un detalle de caso"""
+        """Guarda un detalle de caso y actualiza el progreso"""
         detail = RunDetail(
             run_id=run_id,
             case_id=caso.id,
@@ -46,6 +57,12 @@ class ResultStore:
         )
         self.db.add(detail)
         self.db.commit()
+        
+        # Actualizar progreso: contar casos procesados después del commit
+        run = self.db.query(Run).filter(Run.run_id == run_id).first()
+        if run:
+            run.processed_cases = self.db.query(RunDetail).filter(RunDetail.run_id == run_id).count()
+            self.db.commit()
     
     def compute_metrics(self, run_id: str) -> Metrics:
         """Calcula métricas para un run"""

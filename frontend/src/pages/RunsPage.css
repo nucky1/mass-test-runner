@@ -144,6 +144,12 @@
   color: white;
 }
 
+.progress-text {
+  font-size: 0.75rem;
+  color: #7f8c8d;
+  margin-top: 0.25rem;
+}
+
 .config-section {
   margin-top: 1.5rem;
   padding-top: 1.5rem;

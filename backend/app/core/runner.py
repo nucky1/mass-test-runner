@@ -12,29 +12,39 @@ class MassTestRunner:
         self.store = store
     
     def run(self, config: RunConfig, db: Session) -> RunResult:
-        """Ejecuta un test run completo"""
+        """Ejecuta un test run completo (crea el run)"""
+        # Crear run
+        run_id = self.store.create_run(config.plugin_name, config.config)
+        return self.run_existing(run_id, config, db)
+    
+    def run_existing(self, run_id: str, config: RunConfig, db: Session) -> RunResult:
+        """Ejecuta un test run para un run_id existente"""
         # Configurar DB session en PluginFactory para cargar plugins dinámicos
         PluginFactory.set_db_session(db)
         
         # Obtener plugin (valida estado automáticamente)
         plugin = PluginFactory.get(config.plugin_name)
         
-        # Crear run
-        run_id = self.store.create_run(config.plugin_name, config.config)
-        
         try:
             # Obtener casos
             casos = plugin.obtener_casos(config.config)
             
+            # Convertir a lista si es iterable (para contar total)
+            casos_list = list(casos) if not isinstance(casos, list) else casos
+            total_cases = len(casos_list)
+            
+            # Actualizar total de casos
+            self.store.update_run_progress(run_id, total_cases=total_cases)
+            
             # Procesar cada caso
-            for caso in casos:
+            for caso in casos_list:
                 # Ejecutar test
                 pred = plugin.ejecutar_test(caso, config.config)
                 
                 # Comparar resultados
                 cmp = plugin.comparar_resultados(caso, pred, config.config)
                 
-                # Guardar detalle
+                # Guardar detalle (actualiza progreso automáticamente)
                 self.store.save_detail(run_id, caso, pred, cmp)
             
             # Calcular métricas y cerrar run

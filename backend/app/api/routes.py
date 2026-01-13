@@ -1,5 +1,5 @@
 """Endpoints de la API FastAPI"""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -8,11 +8,12 @@ import csv
 import io
 from datetime import datetime
 
-from app.db.session import get_db
+from app.db.session import get_db, SessionLocal
 from app.core.runner import MassTestRunner
+from app.core.plugin import PluginFactory
 from app.core.store import ResultStore
 from app.models.dto import (
-    RunConfig, RunResult, RunSummary, RunDetail as RunDetailDTO, CommentRequest
+    RunConfig, RunResult, RunSummary, RunDetail as RunDetailDTO, CommentRequest, RunProgress
 )
 from app.models.db import Run, RunDetail
 
@@ -36,12 +37,44 @@ def get_runner(store: ResultStore = Depends(get_store)) -> MassTestRunner:
     return MassTestRunner(store)
 
 
-@router.post("/runs", response_model=RunResult)
-def create_run(config: RunConfig, runner: MassTestRunner = Depends(get_runner), db: Session = Depends(get_db)):
-    """Crea una nueva ejecución y la ejecuta síncronamente"""
+def run_background_task(run_id: str, config: RunConfig):
+    """Ejecuta el run en background"""
+    db = SessionLocal()
     try:
-        result = runner.run(config, db)
-        return result
+        store = ResultStore(db)
+        runner = MassTestRunner(store)
+        runner.run_existing(run_id, config, db)
+    except Exception as e:
+        # Marcar run como failed
+        run = db.query(Run).filter(Run.run_id == run_id).first()
+        if run:
+            run.status = "failed"
+            db.commit()
+        print(f"Error en background task para run {run_id}: {str(e)}")
+    finally:
+        db.close()
+
+
+@router.post("/runs")
+def create_run(
+    config: RunConfig,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Crea una nueva ejecución y la ejecuta en segundo plano.
+    Retorna el run_id inmediatamente.
+    """
+    try:
+        store = ResultStore(db)
+        
+        # Crear run manualmente
+        run_id = store.create_run(config.plugin_name, config.config)
+        
+        # Agregar tarea en background
+        background_tasks.add_task(run_background_task, run_id, config)
+        
+        return {"run_id": run_id, "status": "running", "message": "Run iniciado en segundo plano"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -73,7 +106,8 @@ def list_runs(
             error_rate=run.error_rate,
             total_cases=total,
             mismatches=mismatches,
-            errors=errors
+            errors=errors,
+            processed_cases=run.processed_cases
         ))
     
     return summaries
@@ -205,6 +239,7 @@ def get_run(run_id: str, db: Session = Depends(get_db), store: ResultStore = Dep
         error_rate=run.error_rate,
         total_cases=total,
         mismatches=mismatches,
-        errors=errors
+        errors=errors,
+        processed_cases=run.processed_cases
     )
 

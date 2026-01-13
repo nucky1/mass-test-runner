@@ -18,6 +18,10 @@ class Run(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
     
+    # Progreso
+    total_cases = Column(Integer, nullable=True)  # Total de casos estimados (None si no se conoce)
+    processed_cases = Column(Integer, nullable=False, default=0)  # Casos procesados
+    
     # Métricas calculadas
     accuracy = Column(Float, nullable=True)
     coverage = Column(Float, nullable=True)

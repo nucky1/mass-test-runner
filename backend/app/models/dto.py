@@ -60,6 +60,16 @@ class RunSummary(BaseModel):
     total_cases: int
     mismatches: int
     errors: int
+    processed_cases: Optional[int] = None  # Casos procesados (para progreso)
+
+
+class RunProgress(BaseModel):
+    """Progreso de un run"""
+    run_id: str
+    status: str
+    total_cases: Optional[int] = None
+    processed_cases: int
+    progress_percent: Optional[float] = None  # Porcentaje de completitud (0-100)
 
 
 class RunDetail(BaseModel):

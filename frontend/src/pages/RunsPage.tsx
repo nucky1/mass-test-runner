@@ -25,6 +25,19 @@ function RunsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Polling para runs en ejecución
+  useEffect(() => {
+    const hasRunningRuns = runs.some(run => run.status === 'running')
+    if (!hasRunningRuns) return
+
+    const interval = setInterval(() => {
+      loadRuns()
+    }, 2000) // Actualizar cada 2 segundos
+
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runs])
+
   const loadRuns = async () => {
     try {
       setLoading(true)
@@ -361,7 +374,7 @@ function RunsPage() {
                 <th>Plugin</th>
                 <th>Estado</th>
                 <th>Fecha</th>
-                <th>Casos</th>
+                <th>Progreso</th>
                 <th>Accuracy</th>
                 <th>Coverage</th>
                 <th>Error Rate</th>
@@ -379,7 +392,20 @@ function RunsPage() {
                     <span className={`status status-${run.status}`}>{run.status}</span>
                   </td>
                   <td>{formatDate(run.created_at)}</td>
-                  <td>{run.total_cases}</td>
+                  <td>
+                    {run.status === 'running' && run.processed_cases !== null && run.processed_cases !== undefined ? (
+                      <div>
+                        <div>{run.processed_cases} / {run.total_cases || '?'}</div>
+                        {run.total_cases && run.total_cases > 0 && (
+                          <div className="progress-text">
+                            {((run.processed_cases / run.total_cases) * 100).toFixed(1)}%
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>{run.total_cases}</div>
+                    )}
+                  </td>
                   <td>{formatPercent(run.accuracy)}</td>
                   <td>{formatPercent(run.coverage)}</td>
                   <td>{formatPercent(run.error_rate)}</td>

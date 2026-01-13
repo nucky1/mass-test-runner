@@ -25,6 +25,15 @@ export interface RunSummary {
   total_cases: number
   mismatches: number
   errors: number
+  processed_cases?: number | null
+}
+
+export interface RunProgress {
+  run_id: string
+  status: string
+  total_cases: number | null
+  processed_cases: number
+  progress_percent: number | null
 }
 
 export interface RunDetail {
@@ -75,9 +84,15 @@ export interface PluginInfo {
 }
 
 export const apiService = {
-  // Crear un nuevo run
-  createRun: async (config: RunConfig) => {
+  // Crear un nuevo run (ejecuta en background)
+  createRun: async (config: RunConfig): Promise<{ run_id: string; status: string; message: string }> => {
     const response = await api.post('/api/runs', config)
+    return response.data
+  },
+
+  // Obtener progreso de un run
+  getRunProgress: async (runId: string): Promise<RunProgress> => {
+    const response = await api.get(`/api/runs/${runId}/progress`)
     return response.data
   },
 
