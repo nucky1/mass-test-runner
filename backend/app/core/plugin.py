@@ -8,6 +8,7 @@ import sys
 from sqlalchemy.orm import Session
 from app.models.dto import Case, Pred, Compare
 from app.models.db import Plugin
+from app.core.deps import validate_plugin_imports
 
 
 class TestPlugin(ABC):
@@ -182,6 +183,11 @@ class PluginFactory:
     @classmethod
     def _load_plugin_from_code(cls, code: str, plugin_name: str) -> TestPlugin:
         """Carga un plugin desde código Python dinámicamente"""
+        # Validar imports antes de ejecutar
+        is_valid, error_msg = validate_plugin_imports(code)
+        if not is_valid:
+            raise ValueError(error_msg)
+        
         # Crear un módulo único para este plugin
         module_name = f"plugin_{plugin_name.replace('-', '_')}"
         

@@ -16,10 +16,32 @@ function PluginsPage() {
   const [configSchemaJson, setConfigSchemaJson] = useState('{}')
   const [saving, setSaving] = useState(false)
   const [testingPlugin, setTestingPlugin] = useState<string | null>(null)
+  const [pluginDeps, setPluginDeps] = useState<{
+    allowed: string[]
+    builtin: string[]
+    note: string
+  } | null>(null)
+  const [showBuiltin, setShowBuiltin] = useState(false)
 
   useEffect(() => {
     loadPlugins()
+    loadPluginDeps()
   }, [])
+
+  const loadPluginDeps = async () => {
+    try {
+      const deps = await apiService.getPluginDeps()
+      setPluginDeps(deps)
+    } catch (error) {
+      console.error('Error loading plugin deps:', error)
+      // Fallback a datos hardcodeados mínimos
+      setPluginDeps({
+        allowed: ['pandas', 'openpyxl', 'msal', 'requests', 'sqlalchemy', 'pymysql', 'psycopg2', 'pyodbc'],
+        builtin: ['csv', 'json', 'sqlite3'],
+        note: 'Si necesitás otra librería (no builtin y no listada), instalala en el proyecto antes de importarla.'
+      })
+    }
+  }
 
   const loadPlugins = async () => {
     try {
@@ -171,6 +193,46 @@ function PluginsPage() {
       {showForm && (
         <div className="create-form">
           <h2>{editingPlugin ? 'Editar Plugin' : 'Crear Nuevo Plugin'}</h2>
+          
+          {/* Bloque informativo de dependencias */}
+          <div className="deps-info">
+            <div className="deps-info-header">
+              <strong>📦 Librerías Disponibles para Plugins</strong>
+            </div>
+            <div className="deps-info-content">
+              <p>
+                Este entorno soporta por defecto: <strong>SharePoint</strong> (msal/requests),{' '}
+                <strong>CSV/Excel</strong> (pandas/openpyxl), <strong>DB</strong> (sqlalchemy + drivers mysql/postgres/sqlserver),{' '}
+                <strong>sqlite</strong>.
+              </p>
+              {pluginDeps && (
+                <>
+                  <div className="deps-allowed">
+                    <strong>Paquetes permitidos:</strong>{' '}
+                    {pluginDeps.allowed.join(', ')}
+                  </div>
+                  <div className="deps-builtin">
+                    <button
+                      type="button"
+                      className="deps-toggle"
+                      onClick={() => setShowBuiltin(!showBuiltin)}
+                    >
+                      {showBuiltin ? '▼' : '▶'} Módulos builtin de Python ({pluginDeps.builtin.length})
+                    </button>
+                    {showBuiltin && (
+                      <div className="deps-builtin-list">
+                        {pluginDeps.builtin.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                  <div className="deps-note">
+                    <small>{pluginDeps.note}</small>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label>Nombre del Plugin (ID):</label>
@@ -291,10 +353,20 @@ function PluginsPage() {
                       {plugin.status}
                     </span>
                     {plugin.error_message && (
-                      <div className="error-message" title={plugin.error_message}>
-                        ⚠️ {plugin.error_message.substring(0, 50)}
-                        {plugin.error_message.length > 50 ? '...' : ''}
-                      </div>
+                      <>
+                        {(plugin.error_message.includes('Missing dependency') || 
+                          plugin.error_message.includes('Dependency not allowed')) && (
+                          <span className="dependency-error-badge">
+                            {plugin.error_message.includes('Missing dependency') 
+                              ? 'Dependencia faltante' 
+                              : 'Dependencia no permitida'}
+                          </span>
+                        )}
+                        <div className="error-message" title={plugin.error_message}>
+                          ⚠️ {plugin.error_message.substring(0, 50)}
+                          {plugin.error_message.length > 50 ? '...' : ''}
+                        </div>
+                      </>
                     )}
                   </td>
                   <td>{formatDate(plugin.created_at)}</td>

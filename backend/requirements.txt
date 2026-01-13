@@ -9,3 +9,20 @@ python-dotenv==1.0.0
 python-multipart==0.0.6
 pytest==7.4.3
 pytest-asyncio==0.21.1
+
+# Dependencias permitidas para plugins dinámicos
+# SharePoint / Microsoft Graph
+msal==1.24.1
+requests==2.31.0
+
+# CSV/Excel
+pandas==2.1.3
+openpyxl==3.1.2
+python-dateutil==2.8.2
+
+# SQL Drivers
+pymysql==1.1.0
+pyodbc==5.0.1
+
+# Opcionales útiles (si no vienen como dependencias transitivas)
+urllib3==2.1.0

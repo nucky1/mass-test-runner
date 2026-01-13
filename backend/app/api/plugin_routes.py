@@ -1,16 +1,26 @@
 """Endpoints para gestión de plugins"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict, Any
 from datetime import datetime
 
 from app.db.session import get_db
 from app.core.plugin import PluginFactory
 from app.models.dto import PluginCreate, PluginUpdate, PluginInfo
 from app.models.db import Plugin
+from app.core.deps import ALLOWED_PACKAGES, BUILTIN_PACKAGES
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
 
+
+@router.get("/deps")
+def get_plugin_deps() -> Dict[str, Any]:
+    """Obtiene la lista de dependencias permitidas para plugins"""
+    return {
+        "allowed": sorted(list(ALLOWED_PACKAGES)),
+        "builtin": sorted(list(BUILTIN_PACKAGES)),
+        "note": "Si necesitás otra librería (no builtin y no listada), instalala en el proyecto antes de importarla."
+    }
 
 @router.post("", response_model=PluginInfo)
 def create_plugin(plugin_data: PluginCreate, db: Session = Depends(get_db)):
@@ -198,3 +208,4 @@ def delete_plugin(plugin_name: str, db: Session = Depends(get_db)):
     db.commit()
     
     return {"message": f"Plugin '{plugin_name}' eliminado"}
+

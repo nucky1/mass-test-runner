@@ -165,6 +165,16 @@ export const apiService = {
     const response = await api.post(`/api/plugins/${pluginName}/test`)
     return response.data
   },
+
+  // Obtener dependencias permitidas
+  getPluginDeps: async (): Promise<{
+    allowed: string[]
+    builtin: string[]
+    note: string
+  }> => {
+    const response = await api.get('/api/plugins/deps')
+    return response.data
+  },
 }
 
 export default api
