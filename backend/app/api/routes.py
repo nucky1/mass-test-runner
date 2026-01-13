@@ -22,8 +22,8 @@ router = APIRouter(prefix="/api", tags=["runs"])
 class DetailFilter(str, Enum):
     """Filtros disponibles para detalles de run"""
     ALL = "all"
-    MISMATCH = "mismatch"
-    ERROR = "error"
+    MISMATCH = "mismatches"
+    ERROR = "errors"
 
 
 def get_store(db: Session = Depends(get_db)) -> ResultStore:
@@ -60,8 +60,8 @@ def list_runs(
     for run in runs:
         # Contar detalles
         total = store.get_run_details_count(run.run_id)
-        mismatches = store.get_run_details_count(run.run_id, filter_type="mismatch")
-        errors = store.get_run_details_count(run.run_id, filter_type="error")
+        mismatches = store.get_run_details_count(run.run_id, filter_type="mismatches")
+        errors = store.get_run_details_count(run.run_id, filter_type="errors")
         
         summaries.append(RunSummary(
             run_id=run.run_id,
@@ -79,35 +79,10 @@ def list_runs(
     return summaries
 
 
-@router.get("/runs/{run_id}", response_model=RunSummary)
-def get_run(run_id: str, db: Session = Depends(get_db), store: ResultStore = Depends(get_store)):
-    """Obtiene detalles de una ejecución"""
-    run = store.get_run(run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Run no encontrado")
-    
-    total = store.get_run_details_count(run.run_id)
-    mismatches = store.get_run_details_count(run.run_id, filter_type="mismatch")
-    errors = store.get_run_details_count(run.run_id, filter_type="error")
-    
-    return RunSummary(
-        run_id=run.run_id,
-        plugin_name=run.plugin_name,
-        status=run.status,
-        created_at=run.created_at,
-        accuracy=run.accuracy,
-        coverage=run.coverage,
-        error_rate=run.error_rate,
-        total_cases=total,
-        mismatches=mismatches,
-        errors=errors
-    )
-
-
 @router.get("/runs/{run_id}/details", response_model=List[RunDetailDTO])
 def get_run_details(
     run_id: str,
-    filter: Optional[DetailFilter] = Query(None, description="Filtro: all, mismatch, error"),
+    filter: Optional[DetailFilter] = Query(None, description="Filtro: all, mismatches, errors"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     store: ResultStore = Depends(get_store)
@@ -121,7 +96,6 @@ def get_run_details(
     # Convertir Enum a string o None
     filter_str = filter.value if filter else None
     details = store.get_run_details(run_id, filter_type=filter_str, limit=limit, offset=offset)
-    
     return [
         RunDetailDTO(
             case_id=d.case_id,
@@ -208,3 +182,29 @@ def export_csv(run_id: str, store: ResultStore = Depends(get_store)):
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=run_{run_id}.csv"}
     )
+
+
+@router.get("/runs/{run_id}", response_model=RunSummary)
+def get_run(run_id: str, db: Session = Depends(get_db), store: ResultStore = Depends(get_store)):
+    """Obtiene detalles de una ejecución"""
+    run = store.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run no encontrado")
+    
+    total = store.get_run_details_count(run.run_id)
+    mismatches = store.get_run_details_count(run.run_id, filter_type="mismatches")
+    errors = store.get_run_details_count(run.run_id, filter_type="errors")
+    
+    return RunSummary(
+        run_id=run.run_id,
+        plugin_name=run.plugin_name,
+        status=run.status,
+        created_at=run.created_at,
+        accuracy=run.accuracy,
+        coverage=run.coverage,
+        error_rate=run.error_rate,
+        total_cases=total,
+        mismatches=mismatches,
+        errors=errors
+    )
+

@@ -205,14 +205,28 @@ function PluginsPage() {
                 onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                 required={!editingPlugin}
                 rows={15}
-                placeholder={`def execute(case_data, config):
-    # Tu código aquí
-    return {
-        "ok": True,
-        "value": "resultado",
-        "status": "success",
-        "raw": None,
-        "meta": {}
+                placeholder={`class MyPlugin(BasePlugin):
+    name = "mi-plugin"
+
+    def obtener_casos(self, config):
+        # Ej: leer de SQL, CSV, API, etc.
+        return [...]
+
+    def ejecutar_test(self, caso, config):
+        # Ej: llamar un LLM, un microservicio, reglas, etc.
+        return prediccion
+
+    def comparar_resultados(self, caso, prediccion, config):
+        # Normalizar evaluación
+        return {
+            "ok": True,
+            "score": 0.92,
+            "details": {
+              "expected": caso.get("expected"),
+              "got": prediccion
+            }
+        }
+
     }`}
               />
               {editingPlugin && (

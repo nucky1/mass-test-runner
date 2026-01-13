@@ -152,9 +152,9 @@ class ResultStore:
         """Obtiene detalles de un run con filtros opcionales"""
         query = self.db.query(RunDetail).filter(RunDetail.run_id == run_id)
         
-        if filter_type == "mismatch":
+        if filter_type == "mismatches":
             query = query.filter(RunDetail.match == False)
-        elif filter_type == "error":
+        elif filter_type == "errors":
             query = query.filter(RunDetail.pred_ok == False)
         # filter_type == "all" o None: sin filtro adicional
         
@@ -164,9 +164,9 @@ class ResultStore:
         """Cuenta detalles de un run con filtros"""
         query = self.db.query(RunDetail).filter(RunDetail.run_id == run_id)
         
-        if filter_type == "mismatch":
+        if filter_type == "mismatches":
             query = query.filter(RunDetail.match == False)
-        elif filter_type == "error":
+        elif filter_type == "errors":
             query = query.filter(RunDetail.pred_ok == False)
         
         return query.count()
